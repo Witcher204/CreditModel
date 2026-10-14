@@ -1,6 +1,9 @@
+import time
 import json
 import mimetypes
 import os
+from prometheus_client import Counter, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse
 
@@ -22,6 +25,17 @@ REQUIRED_FIELDS = [
     "loan_term_months",
 ]
 
+HTTP_REQUESTS = Counter(
+    "http_requests_total",
+    "Total number of HTTP requests",
+    ["method", "endpoint", "status"],
+)
+
+HTTP_REQUEST_DURATION = Histogram(
+    "http_request_duration_seconds",
+    "HTTP request processing time in seconds",
+    ["method", "endpoint"],
+)
 
 def predict_default(payload):
     missing = [field for field in REQUIRED_FIELDS if field not in payload]
@@ -42,6 +56,16 @@ def predict_default(payload):
 class RequestHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed_path = urlparse(self.path)
+
+        if parsed_path.path == "/metrics":
+            body = generate_latest()
+            self.send_response(200)
+            self.send_header("Content-Type", CONTENT_TYPE_LATEST)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         if parsed_path.path == "/":
             self.serve_file(os.path.join(FRONTEND_DIR, "index.html"))
             return

@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-python:
+    name: Validate Python
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: docker/requirements.txt
+
+      - name: Install dependencies
+        run: python -m pip install -r docker/requirements.txt
+
+      - name: Compile Python files
+        run: python -m py_compile MLmodel/predict.py
+
+      - name: Import application module
+        working-directory: MLmodel
+        run: python -c "import predict; print('Application module imported successfully')"
+
+  validate-compose:
+    name: Validate Docker Compose
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Validate Compose file
+        run: docker compose config --quiet
+
+  build-image:
+    name: Build application image
+    runs-on: ubuntu-latest
+    needs:
+      - validate-python
+      - validate-compose
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Build Docker image
+        run: docker build --tag credit-model:ci .
